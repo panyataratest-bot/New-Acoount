@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>FIN-JOD · ผูกบัญชี</title>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#1e1e1e; --panel:#242424; --line:#3a3a3a; --muted:#bfbfbf; --text:#f1f1f1;
+      --primary:#00c896; --danger:#ff4d4f; --blue:#6c8cff; --warn:#ffb020;
+    }
+    *{ box-sizing:border-box } html,body{ height:100% }
+    body{
+      margin:0; padding:clamp(.9rem,2.2vw,1.25rem);
+      padding-bottom:calc(clamp(.9rem,2.2vw,1.25rem) + env(safe-area-inset-bottom,0px));
+      font-family:'Kanit',sans-serif; background:var(--bg); color:var(--text);
+    }
+    .wrap{ width:min(680px,100%); margin:auto; background:var(--panel); border:1px solid var(--line);
+      border-radius:20px; padding:clamp(1rem,2.4vw,1.5rem) }
+    h1{ margin:.25rem 0 .75rem; font-size:clamp(1.25rem,4.5vw,1.7rem); color:var(--primary); text-align:center }
+    .row{ display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1rem }
+    .col{ flex:1 1 46%; min-width:220px; display:flex; flex-direction:column; gap:.4rem }
+    label{ color:var(--muted) }
+    input,button{
+      border-radius:12px; border:1px solid var(--line); background:#1d1d1d; color:#fff;
+      min-height:44px; padding:.9rem 1rem; font-size:16px
+    }
+    button{ background:var(--primary); border:none; font-weight:700; cursor:pointer }
+    button:disabled{ opacity:.6; cursor:not-allowed }
+    .btn-ghost{ background:#333 }
+    .card{ background:#1f1f1f; border:1px solid var(--line); border-radius:16px; padding:1rem }
+    .muted{ color:var(--muted) }
+    .head{ display:flex; align-items:center; gap:.5rem; margin-bottom:.5rem }
+    .you{ margin-left:auto; color:#9fe9d4; font-weight:600 }
+    .hide{ display:none }
+
+    /* Success screen */
+    .success{
+      text-align:center; padding:1.25rem;
+      display:flex; flex-direction:column; align-items:center; gap:.7rem;
+    }
+    .check{
+      width:84px; height:84px; border-radius:50%;
+      background:var(--primary); color:#052a27; display:grid; place-items:center;
+      font-size:48px; font-weight:900; box-shadow:0 10px 30px rgba(0,200,150,.35);
+    }
+    .title{ font-size:clamp(1.25rem,4.5vw,1.6rem); font-weight:800 }
+    .subtitle{ color:#cdeee4 }
+
+    /* Toast */
+    #toast{ position:fixed; left:50%; bottom:calc(18px + env(safe-area-inset-bottom,0px));
+      transform:translateX(-50%); background:#333; color:#fff; padding:.6rem .9rem; border-radius:10px;
+      opacity:0; transition:.3s; pointer-events:none; z-index:60 }
+
+    /* Overlay + spinner */
+    #loading{
+      position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+      background:rgba(0,0,0,.35); backdrop-filter:blur(2px); z-index:999; transition:.2s;
+    }
+    #loading.hide{ opacity:0; pointer-events:none }
+    .spinner{ width:42px; height:42px; border-radius:50%; border:4px solid #3a3a3a; border-top-color:var(--primary); animation:spin 1s linear infinite }
+    .loading-text{ margin-top:.75rem; color:#ddd }
+    @keyframes spin{ to{ transform:rotate(360deg) } }
+
+    button[aria-busy="true"]{ opacity:.7; pointer-events:none }
+  </style>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <h1 style="margin:0">ผูกบัญชี (LIFF)</h1>
+      <div class="you" id="who"></div>
+    </div>
+
+    <!-- แจ้งถ้าไม่ใช่ LIFF -->
+    <div id="notLiff" class="card hide">
+      <div style="font-weight:700; color:var(--warn); margin-bottom:.25rem">เปิดใช้งานไม่สำเร็จ</div>
+      <div class="muted">หน้านี้ต้องเปิดผ่าน LINE เท่านั้น (LIFF)</div>
+    </div>
+
+    <!-- ฟอร์มผูก -->
+    <div id="linkBox" class="card hide" role="region" aria-label="ผูกบัญชี">
+      <div class="muted" style="margin-bottom:.6rem">ผูกบัญชีครั้งเดียวเพื่อใช้งานอัตโนมัติจาก LINE</div>
+      <div class="row">
+        <div class="col"><label for="inpUser">User ID</label><input id="inpUser" placeholder="ของคุณ"></div>
+        <div class="col"><label for="inpPin">PIN</label><input id="inpPin" type="password" placeholder="รหัส"></div>
+      </div>
+      <div class="row" style="justify-content:flex-end">
+        <button id="btnLink" class="btn-ghost">ผูกบัญชี</button>
+      </div>
+    </div>
+
+    <!-- หน้าจอสำเร็จ -->
+    <div id="successBox" class="card hide" role="status" aria-live="polite">
+      <div class="success">
+        <div class="check">✓</div>
+        <div class="title">ผูกบัญชีสำเร็จ</div>
+        <div class="subtitle">พร้อมใช้งาน <b>FIN-JOD</b></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast">แจ้งเตือน</div>
+  <div id="loading" aria-live="polite" aria-busy="true">
+    <div class="spinner"></div><div class="loading-text">กำลังโหลด…</div>
+  </div>
+
+<script>
+/* ========= CONFIG ========= */
+const LIFF_ID  = '2008276151-VxDO6mA6';          // ← ใส่ LIFF ID ของคุณ
+const API_URL  = 'https://script.google.com/macros/s/AKfycbxV3xOU1kQM86jUJtfer8hW_HgYkcLfpH942saPVbCZ1RDmN_4LYjpk72OxdKKLQAFt/exec';    // ← ใส่ Apps Script URL
+
+/* ========= STATE ========= */
+let token = localStorage.getItem('fin_token') || '';
+let displayName = localStorage.getItem('fin_name') || '';
+
+/* ========= HELPERS ========= */
+const $ = s => document.querySelector(s);
+function toast(msg, ok=true){
+  const el = $('#toast'); el.textContent = msg;
+  el.style.background = ok ? '#00c896' : '#ff4d4f';
+  el.style.opacity = '1'; setTimeout(()=> el.style.opacity='0', 2000);
+}
+function showOverlay(on){ const el=$('#loading'); el.classList.toggle('hide',!on); el.setAttribute('aria-busy', on?'true':'false'); }
+async function withOverlay(fn){ showOverlay(true); try{ return await fn(); } finally{ showOverlay(false); } }
+function setBusy(btn,on,text){ if(!btn) return; if(on){ btn.dataset._t=btn.textContent; if(text) btn.textContent=text; btn.disabled=true; btn.setAttribute('aria-busy','true'); } else { btn.disabled=false; btn.removeAttribute('aria-busy'); if(btn.dataset._t){ btn.textContent=btn.dataset._t; delete btn.dataset._t; } } }
+async function fetchJSON(url, options={}){ try{ const res=await fetch(url,{...options,headers:{'Content-Type':'text/plain;charset=utf-8',...(options.headers||{})}}); const t=await res.text(); try{ return JSON.parse(t); }catch{return {ok:false,error:'NON_JSON',raw:t}; } }catch(e){ return {ok:false,error:'NETWORK',message:String(e&&e.message||e)}; } }
+async function api(path, payload={}, useToken=true){ const body={path,payload}; if(useToken && token) body.token=token; return fetchJSON(API_URL,{method:'POST',body:JSON.stringify(body)}); }
+function inLiffEnv(){ return typeof window!=='undefined' && typeof window.liff!=='undefined'; }
+
+/* ========= FLOW ========= */
+async function bootstrap(){
+  if(!inLiffEnv()){
+    $('#notLiff').classList.remove('hide');
+    showOverlay(false);
+    return;
+  }
+
+  await withOverlay(async ()=>{
+    try{ await liff.init({ liffId: LIFF_ID }); }catch(e){ toast('เริ่ม LIFF ไม่สำเร็จ', false); return; }
+    if(!liff.isLoggedIn()){ liff.login({ redirectUri: location.href }); return; }
+
+    let prof;
+    try{ prof = await liff.getProfile(); }catch{ toast('อ่านโปรไฟล์ LINE ไม่ได้', false); return; }
+    $('#who').textContent = (prof.displayName||'').trim();
+
+    const r = await api('liff/link_or_login', { line_user_id: prof.userId, display_name: prof.displayName||'' }, false);
+    if(!r.ok && !r.need_verification){
+      toast(r.message || 'เกิดข้อผิดพลาด', false); return;
+    }
+    if(r.need_verification){
+      $('#linkBox').classList.remove('hide');
+      return;
+    }
+    // เคยผูกแล้ว → แสดงหน้าสำเร็จเลย
+    token = r.token; displayName = r.display_name || prof.displayName || '';
+    localStorage.setItem('fin_token', token);
+    localStorage.setItem('fin_name', displayName);
+    showSuccess();
+  });
+}
+
+function showSuccess(){
+  $('#linkBox').classList.add('hide');
+  $('#successBox').classList.remove('hide');
+}
+
+// ผูกครั้งแรกด้วย User/PIN
+$('#btnLink').addEventListener('click', async ()=>{
+  const user_id = $('#inpUser').value.trim();
+  const pin     = $('#inpPin').value.trim();
+  if(!user_id || !pin){ toast('กรอก User และ PIN ให้ครบ', false); return; }
+
+  let prof; try{ prof = await liff.getProfile(); }catch{ toast('อ่านโปรไฟล์ LINE ไม่ได้', false); return; }
+
+  const btn = $('#btnLink');
+  setBusy(btn,true,'กำลังผูกบัญชี…');
+  const r = await api('liff/link_or_login', { line_user_id: prof.userId, display_name: prof.displayName||'', user_id, pin }, false);
+  setBusy(btn,false);
+
+  if(!r.ok){ toast(r.message || 'ผูกบัญชีไม่สำเร็จ', false); return; }
+
+  token = r.token; const name = r.display_name || user_id;
+  localStorage.setItem('fin_token', token);
+  localStorage.setItem('fin_name', name);
+  showSuccess();
+});
+
+/* ========= INIT ========= */
+bootstrap();
+</script>
+</body>
+</html>
